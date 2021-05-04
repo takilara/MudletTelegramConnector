@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE MudletPackage>
+<MudletPackage version="1.001">
+	<ScriptPackage>
+		<ScriptGroup isActive="yes" isFolder="yes">
+			<name>Telegram Connector</name>
+			<packageName></packageName>
+			<script></script>
+			<eventHandlerList />
+			<Script isActive="yes" isFolder="no">
+				<name>TelegramMainScript</name>
+				<packageName></packageName>
+				<script>-- #########################################################################
+-- TODO
+--  * Add #COMMANDS
+--    * #TELEGRAM CONFIGURE
+--    * #TELEGRAM ENABLE/DISABLE
+--    * #TELEGRAM VERSION
+--    * #TELEGRAM HELP
+--    * #TELEGRAM UPDATE
+--    * #HELP
+--    * #VERSION
+--    * #ABOUT
+-- #########################################################################
+
+-- Telegram configure 
+--    -&gt; collect and store Token and update interval
+--    -&gt; also allow setting a char name, or use Profile Name
+--    -&gt; also allowed "senders"
+
+-- 
+
+Telegram = Telegram or {}
+Telegram.Version = "0.0.0"
+Telegram.PackageName = "Telegram Connector"
+-- should be gotten from separate config lua, if not exists, then request it
+Telegram.Token = "1746970771:AAF4ARpO-z_B2uN7d4l0S3RmnWMwkCeply0"
+Telegram.MyName = Telegram.MyName or getProfileName()
+Telegram.UpdateInterval = Telegram.UpdateInterval or 10 -- seconds
+Telegram.Enabled = Telegram.Enabled or true
+Telegram.Enabled = true
+
+
+
+Telegram.EventHandlerIds = Telegram.EventHandlerIds or {}
+Telegram.AliasHandlerIds = Telegram.AliasHandlerIds or {}
+
+Telegram.URL = "https://api.telegram.org/bot"
+Telegram.getReturnHandler = Telegram.getReturnHandler or nil
+Telegram.getUpdateTimerId = Telegram.getUpdateTimerId or nil
+Telegram.LastIdHandled = Telegram.LastIdHandled or -1
+--Telegram.LastIdHandled = -1
+
+local URL_GETUPDATES=Telegram.URL..Telegram.Token.."/getUpdates"
+local URL_SENDMESSAGE=Telegram.URL..Telegram.Token.."/sendMessage"
+
+local lineBuffer = {}
+local current_message_id = -1
+local current_chat_id = -1
+
+
+function Telegram:HandleUserCommand(cmd,args)
+  print("HandleUserCommand")
+  --display(cmd)
+  --display(args)
+  
+  cmd = string.lower(cmd)
+  
+  local cmdA = string.split(args," ")
+  sub_cmd = string.lower(table.remove(cmdA,1))
+  sub_args = table.concat(cmdA)
+  
+  if (cmd=="help") then         -- Hook to global #HELP
+    Telegram:showHelp()
+  elseif (cmd=="version") then  -- Hook to global #VERSION
+    Telegram:showVersion()
+  elseif (cmd=="about") then    -- Hook to global #ABOUT
+    Telegram:showAbout()
+  -- Package specific below
+  elseif (cmd=="telegram") then
+    if sub_cmd=="enable" then
+      Telegram.Enabled = true
+      cecho("&lt;green&gt;"..Telegram.PackageName.." ENABLED\n")
+      --Telegram:showStatus()
+    elseif sub_cmd=="disable" then
+      Telegram.Enabled = false
+      cecho("&lt;orange&gt;"..Telegram.PackageName.." DISABLED\n")
+      --Telegram:showStatus()
+    elseif sub_cmd=="version" then
+      Telegram:showVersion()
+    elseif sub_cmd=="help" then
+      Telegram:showHelp()
+    elseif sub_cmd=="about" then
+      Telegram:showAbout()
+    elseif sub_cmd=="status" then
+      Telegram:showStatus()
+    end
+    --local subcmd = 
+  end
+end
+
+function Telegram:showHelp()
+  cecho("&lt;cyan&gt;".. Telegram.PackageName ..":\n")
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#HELP"),"Show Helpfile(s)"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#VERSION"),"Show version(s)"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM UPDATE"),"Upgrade the package"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM ENABLE/DISABLE"),"Enable or Disable the package"))
+  cecho("&lt;cyan&gt;---------------------------------------------------------------------------------------\n")
+  print()
+end
+
+function Telegram:showAbout()
+  print("Show about")
+end
+
+function Telegram:showStatus()
+  print("Show status")
+  -- enabled
+  -- token
+  -- interval
+end
+
+function Telegram:showVersion()
+  --local vline = Telegram:checkVersion()
+  --cecho(string.format("&lt;cyan&gt;%-50s: %s %s\n","Cross Profile Communication",cpc.version,vline))
+  cecho(string.format("&lt;cyan&gt;%-50s: %s\n","Telegram Connector",Telegram.Version))
+end
+
+
+function Telegram:getUpdates()
+  --getHTTP(Telegram.URL..Telegram.Token.."/getUpdates")
+  if Telegram.Enabled then
+    getHTTP(URL_GETUPDATES)
+  end
+end
+
+function Telegram:onHttpPost(event, ...)
+  if event=="sysPostHttpError" then
+    display(arg)
+  end
+  --display(arg)
+end
+
+function Telegram:onHttpGetDone(event, ...)
+
+  --display(arg[2])
+  local content = yajl.to_value(arg[2])
+  local url = arg[1]      -- use this to check if this is a telegram message, and if so what type
+  local response = arg[3] -- not sure what to use this for
+  
+  
+  --display(event)
+  
+  --display(url)
+  
+  --if string.starts(url,Telegram.URL) then
+  if url:starts("https://api.telegram.org") then    -- we only care about telegram messages
+    if url == URL_GETUPDATES then
+      --print("getUpdates!")
+      --display(content)
+      --display(content["ok"])
+      --display(content["result"])
+      if content["ok"] then
+        Telegram:ParseUpdates(content["result"])
+      else
+        cecho("&lt;orange&gt;getUpdates was not successful, check URL\n")
+        display(arg)
+      end
+    else
+      cecho("&lt;orange&gt;Not handled\n")
+      display(url)
+      display(contents)
+    end
+  end
+  
+end
+
+function Telegram:ParseUpdates(contents)
+  --print("ParseUpdates")
+  --display(contents)
+  if Telegram.LastIdHandled==-1 then
+    print("just loaded, update lasthandled to..")
+    Telegram.LastIdHandled = contents[#contents]["message"]["message_id"]
+    print(Telegram.LastIdHandled)
+  end
+  
+  for i,m in pairs(contents) do
+    --display(m["message"])
+    local t = m["message"]["chat"]["type"]  -- private or group
+    
+    local message_id = m["message"]["message_id"]
+    local chat_id = m["message"]["chat"]["id"]
+    local sender_id = m["message"]["from"]["id"]
+    local cmd = m["message"]["text"]
+    local from_username = m["message"]["from"]["username"]
+    
+    --print(t)
+    --print(message_id)
+    --print(channel_id)
+    --print(sender_id)
+    --print(cmd)
+    if message_id&gt;Telegram.LastIdHandled then
+      if t=="group" then
+        -- is this message for me?
+        cmdA = cmd:split(" ")
+        local cmdName = string.lower(cmdA[1])
+        if string.find(cmdName,string.lower(Telegram.MyName))~=nil then
+          --print("This command is for me, execute it")
+          -- remove first word
+          --display(cmd)
+          --cmdA = string.split(cmd," ")
+          --display(cmdA)
+          table.remove(cmdA,1)
+          --display(cmdA)
+          cmd = table.concat(cmdA," ")
+          --Telegram:HandleCommand(cmd,message_id,chat_id)
+        else
+          print("This command is for '"..cmdName.."', i am '"..Telegram.MyName.."', Ignore it...")
+          cmd = nil
+        end
+        --print("Name")
+        --print(cmdA[1])
+      else
+        -- private message, just execute it
+        --Telegram:HandleCommand(cmd,message_id,chat_id)
+      end
+      if cmd~=nil then
+        Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
+      end
+    end
+    
+    
+  end
+end
+
+function Telegram:HtmlEncode(str)
+  str = string.gsub(str,"&amp;","&amp;amp;")
+  str = string.gsub(str,"&lt;","&amp;lt;")
+  str = string.gsub(str,"&gt;","&amp;gt;")
+  return str
+end
+
+function Telegram:CaptureLine(...)
+  if isPrompt() then
+    killTrigger(Telegram.lineTriggerId)
+    Telegram.lineTriggerId = nil
+    --display(lineBuffer)
+    
+    local htmlMsg = Telegram:HtmlEncode(table.concat(lineBuffer,"\n")) 
+    
+    local retMsg = {}
+    retMsg["chat_id"]=current_chat_id
+    --retMsg["text"]="&lt;pre&gt;"..table.concat(lineBuffer,"\n").."&lt;/pre&gt;"
+    retMsg["text"]="&lt;pre&gt;"..htmlMsg.."&lt;/pre&gt;"
+    retMsg["reply_to_message_id"]=current_message_id
+    retMsg["disable_notification"]=true
+    retMsg["parse_mode"]="HTML"
+  
+  --local header = {["Content-Type"] = "application/json"}
+  --postHTTP(yajl.to_string(retMsg),URL_SENDMESSAGE,header)
+  Telegram:SendMessage(retMsg)
+    
+    
+  else
+    -- dont add prompt
+    table.insert(lineBuffer,line)
+  end
+end
+
+function Telegram:SendMessage(msgTable)
+  local header = {["Content-Type"] = "application/json"}
+  postHTTP(yajl.to_string(msgTable),URL_SENDMESSAGE,header)
+end
+
+
+
+function Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
+  -- notify "On It"
+  cecho("&lt;cyan&gt;Telegram (".. from_username ..") has asked me to: '"..cmd.."'\n")
+  local retMsg = {}
+  retMsg["chat_id"]=chat_id
+  retMsg["text"]="on it"
+  retMsg["reply_to_message_id"]=message_id
+  retMsg["disable_notification"]=true
+  
+  current_message_id = message_id
+  current_chat_id = chat_id
+  
+  --local header = {["Content-Type"] = "application/json"}
+  --postHTTP(yajl.to_string(retMsg),URL_SENDMESSAGE,header)
+  
+  Telegram:SendMessage(retMsg)
+  
+  -- start capture
+  lineBuffer = {}
+  -- enable line trigger
+  if Telegram.lineTriggerId then 
+    killTrigger(Telegram.lineTriggerId)
+    Telegram.lineTriggerId = nil
+  end
+  Telegram.lineTriggerId = tempLineTrigger(0,99,[[Telegram:CaptureLine()]])
+  
+  -- send command
+  expandAlias(cmd)
+  -- update last handled
+  Telegram.LastIdHandled = message_id
+  -- stop Capture
+  -- send last 3 lines back
+end
+
+-- kill all dynamic handlers
+-- ... events
+for i,handlerId in pairs(Telegram.EventHandlerIds) do
+  if tonumber(handlerId) then
+    killAnonymousEventHandler(handlerId)
+    Telegram.EventHandlerIds[i]= nil
+  end
+end
+
+-- ... Aliases
+for i,handlerId in pairs(Telegram.AliasHandlerIds) do
+  --print("Should remove alias "..handlerId)
+  if tonumber(handlerId) then
+    killAlias(handlerId)
+    Telegram.AliasHandlerIds[i]= nil
+  end
+end
+
+
+-- setup dynamic eventHandlers
+table.insert(Telegram.EventHandlerIds,registerAnonymousEventHandler("sysPostHttpDone", [[Telegram:onHttpPost]]))
+table.insert(Telegram.EventHandlerIds,registerAnonymousEventHandler("sysPostHttpError", [[Telegram:onHttpPost]]))
+
+--table.insert(Telegram.AliasHandlerIds,tempAlias("^#(?i)(\btelegram\b|\bhelp\b|\bversion\|\babout\b)(?-i)\s*(.*)$",[[Telegram:HandleCommand]]))
+--table.insert(Telegram.AliasHandlerIds,tempAlias("^#telegram",[[Telegram:HandleUserCommand(matches[2],matches[3])]]))
+table.insert(Telegram.AliasHandlerIds,tempAlias([[^#(?i)(\btelegram\b|\bhelp\b|\bversion\b|\babout\b)(?-i)\s*(.*)$]],[[Telegram:HandleUserCommand(matches[2],matches[3])]]))
+display(Telegram.AliasHandlerIds)
+
+for i,handlerId in pairs(Telegram.AliasHandlerIds) do
+  --print("Should remove alias "..handlerId)
+  if tonumber(handlerId) then
+    enableAlias(handlerId)
+  end
+end
+
+
+
+-- manual handlers
+if Telegram.getReturnHandler~=nil then
+  killAnonymousEventHandler(Telegram.getReturnHandler)
+end
+
+if Telegram.getUpdateTimerId~=nil then
+  killTimer(Telegram.getUpdateTimerId)
+end
+Telegram.getReturnHandler = registerAnonymousEventHandler("sysGetHttpDone", [[Telegram:onHttpGetDone]])
+Telegram.getUpdateTimerId = tempTimer(Telegram.UpdateInterval,[[Telegram:getUpdates()]],true)
+Telegram:getUpdates()</script>
+				<eventHandlerList />
+			</Script>
+		</ScriptGroup>
+	</ScriptPackage>
+</MudletPackage>
