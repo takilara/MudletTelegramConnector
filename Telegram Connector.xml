@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>
 <MudletPackage version="1.001">
+	<TriggerPackage />
+	<TimerPackage />
+	<AliasPackage />
+	<ActionPackage />
 	<ScriptPackage>
 		<ScriptGroup isActive="yes" isFolder="yes">
 			<name>Telegram Connector</name>
@@ -34,7 +38,14 @@ Telegram = Telegram or {}
 Telegram.Version = "0.0.0"
 Telegram.PackageName = "Telegram Connector"
 -- should be gotten from separate config lua, if not exists, then request it
-Telegram.Token = "1746970771:AAF4ARpO-z_B2uN7d4l0S3RmnWMwkCeply0"
+
+Telegram.Options = {}
+
+
+
+--Telegram.Token = "1746970771:AAF4ARpO-z_B2uN7d4l0S3RmnWMwkCeply0"
+
+
 Telegram.MyName = Telegram.MyName or getProfileName()
 Telegram.UpdateInterval = Telegram.UpdateInterval or 10 -- seconds
 Telegram.Enabled = Telegram.Enabled or true
@@ -51,16 +62,41 @@ Telegram.getUpdateTimerId = Telegram.getUpdateTimerId or nil
 Telegram.LastIdHandled = Telegram.LastIdHandled or -1
 --Telegram.LastIdHandled = -1
 
-local URL_GETUPDATES=Telegram.URL..Telegram.Token.."/getUpdates"
-local URL_SENDMESSAGE=Telegram.URL..Telegram.Token.."/sendMessage"
+local URL_GETUPDATES=nil
+local URL_SENDMESSAGE=nil
+
+
 
 local lineBuffer = {}
 local current_message_id = -1
 local current_chat_id = -1
 
 
+function Telegram:SaveConfig()
+  table.save(getMudletHomeDir().."/telegram_options.lua", Telegram.Options)
+end
+
+function Telegram:SetToken(token)
+  Telegram.Options["Token"] = token
+  Telegram.Token = Telegram.Options["Token"] or nil
+  if Telegram.Token~=nil then
+    URL_GETUPDATES=Telegram.URL..Telegram.Token.."/getUpdates"
+    URL_SENDMESSAGE=Telegram.URL..Telegram.Token.."/sendMessage"
+  end
+end
+
+function Telegram:LoadConfig()
+  if io.exists(getMudletHomeDir().."/telegram_options.lua") then
+    table.load(getMudletHomeDir().."/telegram_options.lua", Telegram.Options) -- using / is OK on Windows too.
+  else -- save it if it doesnt exits
+    table.save(getMudletHomeDir().."/telegram_options.lua", Telegram.Options)
+  end
+  Telegram:SetToken(Telegram.Options["Token"])
+end
+
+
 function Telegram:HandleUserCommand(cmd,args)
-  print("HandleUserCommand")
+  --print("HandleUserCommand")
   --display(cmd)
   --display(args)
   
@@ -94,6 +130,10 @@ function Telegram:HandleUserCommand(cmd,args)
       Telegram:showAbout()
     elseif sub_cmd=="status" then
       Telegram:showStatus()
+    elseif sub_cmd=="token" then
+      Telegram:SetToken(sub_args)
+      Telegram:CheckConfig()
+      Telegram:SaveConfig()
     end
     --local subcmd = 
   end
@@ -115,6 +155,7 @@ end
 
 function Telegram:showStatus()
   print("Show status")
+  cecho("&lt;cyan&gt;Token: '"..Telegram.Options["Token"].."'\n")
   -- enabled
   -- token
   -- interval
@@ -129,7 +170,7 @@ end
 
 function Telegram:getUpdates()
   --getHTTP(Telegram.URL..Telegram.Token.."/getUpdates")
-  if Telegram.Enabled then
+  if Telegram.Enabled and Telegram.Token~=nil then
     getHTTP(URL_GETUPDATES)
   end
 end
@@ -272,6 +313,12 @@ function Telegram:SendMessage(msgTable)
   postHTTP(yajl.to_string(msgTable),URL_SENDMESSAGE,header)
 end
 
+function Telegram:CheckConfig()
+  if Telegram.Options["Token"]==nil then
+    cecho("&lt;orange&gt;Token has not been set.\n")
+    cecho("&lt;orange&gt;#TELEGRAM TOKEN &lt;token&gt; to set..\n")
+  end
+end
 
 
 function Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
@@ -308,6 +355,12 @@ function Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
   -- send last 3 lines back
 end
 
+-- =========================================
+--                   INIT
+-- =========================================
+
+
+
 -- kill all dynamic handlers
 -- ... events
 for i,handlerId in pairs(Telegram.EventHandlerIds) do
@@ -331,10 +384,8 @@ end
 table.insert(Telegram.EventHandlerIds,registerAnonymousEventHandler("sysPostHttpDone", [[Telegram:onHttpPost]]))
 table.insert(Telegram.EventHandlerIds,registerAnonymousEventHandler("sysPostHttpError", [[Telegram:onHttpPost]]))
 
---table.insert(Telegram.AliasHandlerIds,tempAlias("^#(?i)(\btelegram\b|\bhelp\b|\bversion\|\babout\b)(?-i)\s*(.*)$",[[Telegram:HandleCommand]]))
---table.insert(Telegram.AliasHandlerIds,tempAlias("^#telegram",[[Telegram:HandleUserCommand(matches[2],matches[3])]]))
 table.insert(Telegram.AliasHandlerIds,tempAlias([[^#(?i)(\btelegram\b|\bhelp\b|\bversion\b|\babout\b)(?-i)\s*(.*)$]],[[Telegram:HandleUserCommand(matches[2],matches[3])]]))
-display(Telegram.AliasHandlerIds)
+
 
 for i,handlerId in pairs(Telegram.AliasHandlerIds) do
   --print("Should remove alias "..handlerId)
@@ -355,9 +406,16 @@ if Telegram.getUpdateTimerId~=nil then
 end
 Telegram.getReturnHandler = registerAnonymousEventHandler("sysGetHttpDone", [[Telegram:onHttpGetDone]])
 Telegram.getUpdateTimerId = tempTimer(Telegram.UpdateInterval,[[Telegram:getUpdates()]],true)
+
+Telegram:LoadConfig()
+Telegram:CheckConfig()
 Telegram:getUpdates()</script>
 				<eventHandlerList />
 			</Script>
 		</ScriptGroup>
 	</ScriptPackage>
+	<KeyPackage />
+	<HelpPackage>
+		<helpURL></helpURL>
+	</HelpPackage>
 </MudletPackage>
