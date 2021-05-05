@@ -40,6 +40,9 @@ Telegram.PackageName = "Telegram Connector"
 -- should be gotten from separate config lua, if not exists, then request it
 
 Telegram.Options = {}
+Telegram.Authorized = {} -- populate from file
+Telegram.Authorized["EppaTo"] = true
+Telegram.PendingAuthorization = Telegram.PendingAuthorization or {} -- populate from file
 
 
 
@@ -114,7 +117,10 @@ function Telegram:HandleUserCommand(cmd,args)
     Telegram:showAbout()
   -- Package specific below
   elseif (cmd=="telegram") then
-    if sub_cmd=="enable" then
+    if sub_cmd=="" then
+      Telegram:showHelp()
+      Telegram:showStatus()
+    elseif sub_cmd=="enable" then
       Telegram.Enabled = true
       cecho("&lt;green&gt;"..Telegram.PackageName.." ENABLED\n")
       --Telegram:showStatus()
@@ -143,6 +149,8 @@ function Telegram:showHelp()
   cecho("&lt;cyan&gt;".. Telegram.PackageName ..":\n")
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#HELP"),"Show Helpfile(s)"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#VERSION"),"Show version(s)"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM STATUS"),"Show Telegram Status"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM TOKEN &lt;token&gt;"),"Set Telegram Token"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM UPDATE"),"Upgrade the package"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM ENABLE/DISABLE"),"Enable or Disable the package"))
   cecho("&lt;cyan&gt;---------------------------------------------------------------------------------------\n")
@@ -154,11 +162,15 @@ function Telegram:showAbout()
 end
 
 function Telegram:showStatus()
-  print("Show status")
+  cecho("&lt;cyan&gt;---------------------------- TELEGRAM CONNECTOR STATUS --------------------------------\n")
+  Telegram:showVersion()
   cecho("&lt;cyan&gt;Token: '"..Telegram.Options["Token"].."'\n")
+  cecho("&lt;cyan&gt;Enabled: '"..tostring(Telegram.Enabled).."'\n")
   -- enabled
   -- token
   -- interval
+  cecho("&lt;cyan&gt;---------------------------------------------------------------------------------------\n")
+  Telegram:Reset()
 end
 
 function Telegram:showVersion()
@@ -170,20 +182,25 @@ end
 
 function Telegram:getUpdates()
   --getHTTP(Telegram.URL..Telegram.Token.."/getUpdates")
+  --print("getUpdates")
   if Telegram.Enabled and Telegram.Token~=nil then
+    --print("enabled, getUpdates")
     getHTTP(URL_GETUPDATES)
   end
 end
 
 function Telegram:onHttpPost(event, ...)
   if event=="sysPostHttpError" then
-    display(arg)
+    if string.find(arg[1],"telegram")~=nil then
+      display(arg)
+    end
   end
   --display(arg)
 end
 
 function Telegram:onHttpGetDone(event, ...)
-
+  --print("GetReturned")
+  --display(arg)
   --display(arg[2])
   local content = yajl.to_value(arg[2])
   local url = arg[1]      -- use this to check if this is a telegram message, and if so what type
@@ -216,6 +233,10 @@ function Telegram:onHttpGetDone(event, ...)
   
 end
 
+function Telegram:Reset()
+  Telegram.LastIdHandled=-1
+end
+
 function Telegram:ParseUpdates(contents)
   --print("ParseUpdates")
   --display(contents)
@@ -240,13 +261,15 @@ function Telegram:ParseUpdates(contents)
     --print(channel_id)
     --print(sender_id)
     --print(cmd)
+    --print("have i handled this? "..message_id)
     if message_id&gt;Telegram.LastIdHandled then
+      --print("no")
       if t=="group" then
         -- is this message for me?
         cmdA = cmd:split(" ")
         local cmdName = string.lower(cmdA[1])
         if string.find(cmdName,string.lower(Telegram.MyName))~=nil then
-          --print("This command is for me, execute it")
+          print("This command is for me, execute it")
           -- remove first word
           --display(cmd)
           --cmdA = string.split(cmd," ")
@@ -256,7 +279,7 @@ function Telegram:ParseUpdates(contents)
           cmd = table.concat(cmdA," ")
           --Telegram:HandleCommand(cmd,message_id,chat_id)
         else
-          print("This command is for '"..cmdName.."', i am '"..Telegram.MyName.."', Ignore it...")
+          --print("This command is for '"..cmdName.."', i am '"..Telegram.MyName.."', Ignore it...")
           cmd = nil
         end
         --print("Name")
@@ -308,6 +331,24 @@ function Telegram:CaptureLine(...)
   end
 end
 
+function Telegram:Tell(username,msg)
+  -- Wont work yet, need to store inbound users/usernames
+  
+  local htmlMsg = Telegram:HtmlEncode(msg) 
+  local retMsg = {}
+  --retMsg["chat_id"]=username
+  retMsg["chat_id"]="@EppaTo"
+  
+  --retMsg["text"]="&lt;pre&gt;"..table.concat(lineBuffer,"\n").."&lt;/pre&gt;"
+  --retMsg["text"]="&lt;pre&gt;"..htmlMsg.."&lt;/pre&gt;"
+  retMsg["text"]=msg
+  --retMsg["reply_to_message_id"]=current_message_id
+  --retMsg["disable_notification"]=true
+  --retMsg["parse_mode"]="HTML"
+  display(retMsg)
+  Telegram:SendMessage(retMsg)
+end
+
 function Telegram:SendMessage(msgTable)
   local header = {["Content-Type"] = "application/json"}
   postHTTP(yajl.to_string(msgTable),URL_SENDMESSAGE,header)
@@ -322,7 +363,41 @@ end
 
 
 function Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
+  -- check if Authorized
+  --print("check if "..from_username.." is authorized...")
+  --display(Telegram.Authorized)
+  --display(Telegram.Authorized[from_username])
+  if Telegram.Authorized[from_username]==nil then
+  
+    cecho("&lt;orange&gt;Telegram (".. from_username .." UNAUTHORIZED) has asked me to: '"..cmd.."'\n")
+    cecho("&lt;orange&gt;#TELEGRAM AUTH "..from_username.." to authorize\n")
+    cecho("&lt;orange&gt;#TELEGRAM IGNORE "..from_username.." to ignore future requests\n")
+    -- add to pending approvals
+    Telegram.PendingAuthorization[from_username]=chat_id
+
+  
+    local msg = "&lt;b&gt;"..Telegram:HtmlEncode("Command ignored....\nUser '"..from_username.."' not authorized\n#TELEGRAM AUTH "..from_username.." in Mudlet to Authorize.").."&lt;/b&gt;"
+    
+    local retMsg = {}
+    retMsg["chat_id"]=chat_id
+    retMsg["text"]=msg
+    retMsg["reply_to_message_id"]=message_id
+    retMsg["disable_notification"]=true
+    retMsg["parse_mode"]="HTML"
+    
+    current_message_id = message_id
+    current_chat_id = chat_id
+    
+    --local header = {["Content-Type"] = "application/json"}
+    --postHTTP(yajl.to_string(retMsg),URL_SENDMESSAGE,header)
+    
+    Telegram:SendMessage(retMsg)
+    Telegram.LastIdHandled = message_id
+  
+    return false
+  end
   -- notify "On It"
+  
   cecho("&lt;cyan&gt;Telegram (".. from_username ..") has asked me to: '"..cmd.."'\n")
   local retMsg = {}
   retMsg["chat_id"]=chat_id
@@ -353,6 +428,7 @@ function Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
   Telegram.LastIdHandled = message_id
   -- stop Capture
   -- send last 3 lines back
+  return true
 end
 
 -- =========================================
