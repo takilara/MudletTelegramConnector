@@ -77,14 +77,15 @@ end
 
 function Telegram:SetToken(token)
   Telegram.Options["Token"] = token
+  Telegram:UpdateUrls()
   
   
 end
 
 function Telegram:UpdateUrls()
   if Telegram.Options["Token"]~=nil then
-    URL_GETUPDATES=Telegram.URL..Telegram.Token.."/getUpdates"
-    URL_SENDMESSAGE=Telegram.URL..Telegram.Token.."/sendMessage"
+    URL_GETUPDATES=Telegram.URL..Telegram.Options.Token.."/getUpdates"
+    URL_SENDMESSAGE=Telegram.URL..Telegram.Options.Token.."/sendMessage"
   end
 end
 
@@ -553,6 +554,7 @@ function Telegram:CaptureLine(...)
 end
 
 function Telegram:Tell(username,msg,disable_notification)
+  --print("try to send message to telegram...")
   disable_notification = disable_notification or false
   --display(username)
   --display(msg)
@@ -577,6 +579,9 @@ end
 
 function Telegram:SendMessage(msgTable)
   local header = {["Content-Type"] = "application/json"}
+  Telegram:UpdateUrls()
+  --print("url: "..URL_SENDMESSAGE)
+  cecho("&lt;cyan&gt;Sending to telegram...\n")
   postHTTP(yajl.to_string(msgTable),URL_SENDMESSAGE,header)
 end
 
