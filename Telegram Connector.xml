@@ -11,10 +11,11 @@
 			<packageName></packageName>
 			<script></script>
 			<eventHandlerList />
-			<Script isActive="yes" isFolder="no">
-				<name>TelegramMainScript</name>
-				<packageName></packageName>
-				<script>-- #########################################################################
+		</ScriptGroup>
+		<Script isActive="yes" isFolder="no">
+			<name>TelegramMainScript</name>
+			<packageName></packageName>
+			<script>-- #########################################################################
 -- TODO
 --  * Add #COMMANDS
 --    * #TELEGRAM CONFIGURE
@@ -292,7 +293,7 @@ function Telegram:DeleteConfig()
   Telegram:UpdateUrls()
 end
 
-function Telegram:getUpdates()
+function Telegram:getInitialUpdates()
   --getHTTP(Telegram.URL..Telegram.Token.."/getUpdates")
   --print("getUpdates")
   if Telegram.Options.Enabled and Telegram.Options.Token~="" then
@@ -301,14 +302,65 @@ function Telegram:getUpdates()
   end
 end
 
+function Telegram:getUpdates()
+  --getHTTP(Telegram.URL..Telegram.Token.."/getUpdates")
+  --print("getUpdates")
+  if Telegram.Options.Enabled and Telegram.Options.Token~="" then
+  --print("enabled, getUpdates")
+  --getHTTP(URL_GETUPDATES)
+    local header = {["Content-Type"] = "application/json"}
+    local opts = {}
+    opts["allowed_updates"] = {"message"}
+    if Telegram.LastIdHandled == -1 then
+      opts["offset"] = -2
+    else
+      opts["offset"] = Telegram.LastIdHandled+1
+    end
+    --opts["limit"] = 10
+    
+    --display(opts)
+    postHTTP(yajl.to_string(opts),URL_GETUPDATES,header)
+  end
+end
+
 function Telegram:onHttpPost(event, ...)
   if event=="sysPostHttpError" then
     if string.find(arg[1],"telegram")~=nil then
       display(arg)
     end
+  else
+    
+    local content = yajl.to_value(arg[2])
+    local url = arg[1]      -- use this to check if this is a telegram message, and if so what type
+    local response = arg[3] -- not sure what to use this for
+    
+    --if string.starts(url,Telegram.URL) then
+    if url:starts("https://api.telegram.org") then    -- we only care about telegram messages
+      
+      if url == URL_GETUPDATES then
+        
+        --display(url)
+        --print("getUpdates!")
+        --display(content)
+        --display(content["ok"])
+        --display(content["result"])
+        if content["ok"] then
+          --print("content ok")
+          --display(content)
+          Telegram:ParseUpdates(content["result"])
+          --display("Parse done")
+        else
+          cecho("&lt;orange&gt;getUpdates was not successful, check URL\n")
+          display(arg)
+        end
+      end
+    end
+    
   end
   --display(arg)
 end
+
+
 
 function Telegram:onHttpGetDone(event, ...)
   --print("GetReturned")
@@ -331,13 +383,15 @@ function Telegram:onHttpGetDone(event, ...)
       --display(content["ok"])
       --display(content["result"])
       if content["ok"] then
+      
         Telegram:ParseUpdates(content["result"])
+
       else
         cecho("&lt;orange&gt;getUpdates was not successful, check URL\n")
         display(arg)
       end
     else
-      cecho("&lt;orange&gt;Not handled\n")
+      cecho("&lt;orange&gt;GET Not handled\n")
       display(url)
       display(contents)
     end
@@ -419,7 +473,10 @@ function Telegram:ParseUpdates(contents)
           --Telegram:HandleCommand(cmd,message_id,chat_id)
         end
         if cmd~=nil then
-          if Telegram.CheckAuthorized(from_username) then
+          --display("cmd not nil")
+          --display(from_username)
+          --display(Telegram:CheckAuthorized(from_username))
+          if Telegram:CheckAuthorized(from_username) then
             Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
           else
             --display(m)
@@ -428,6 +485,8 @@ function Telegram:ParseUpdates(contents)
             cecho("&lt;orange&gt;#TELEGRAM IGNORE "..from_username.." to ignore future requests\n")
             -- add to pending approvals
             Telegram.Options.PendingAuthorization[from_username]=from_id
+            
+            --display(Telegram.Options.PendingAuthorization)
         
           
             local msg = "&lt;b&gt;"..Telegram:HtmlEncode("Command ignored....\nUser '"..from_username.."' not authorized\n#TELEGRAM AUTH "..from_username.." in Mudlet to Authorize.").."&lt;/b&gt;"
@@ -640,10 +699,9 @@ Telegram:LoadConfig()
 Telegram.getUpdateTimerId = tempTimer(Telegram.Options.Interval,[[Telegram:getUpdates()]],true)
 Telegram:CheckConfig()
 --display(Telegram.Options)
-Telegram:getUpdates()</script>
-				<eventHandlerList />
-			</Script>
-		</ScriptGroup>
+Telegram:getInitialUpdates()</script>
+			<eventHandlerList />
+		</Script>
 	</ScriptPackage>
 	<KeyPackage />
 	<HelpPackage>
