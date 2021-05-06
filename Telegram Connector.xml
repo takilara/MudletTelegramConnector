@@ -40,13 +40,7 @@ Telegram.PackageName = "Telegram Connector"
 -- should be gotten from separate config lua, if not exists, then request it
 
 Telegram.Options = {}
-Telegram.Authorized = {} -- populate from file
-Telegram.Authorized["EppaTo"] = true
-Telegram.PendingAuthorization = Telegram.PendingAuthorization or {} -- populate from file
 
-
-
---Telegram.Token = "1746970771:AAF4ARpO-z_B2uN7d4l0S3RmnWMwkCeply0"
 
 
 Telegram.MyName = Telegram.MyName or getProfileName()
@@ -76,13 +70,18 @@ local current_chat_id = -1
 
 
 function Telegram:SaveConfig()
+  cecho("&lt;cyan&gt;Saving Telegram config...\n")
   table.save(getMudletHomeDir().."/telegram_options.lua", Telegram.Options)
 end
 
 function Telegram:SetToken(token)
   Telegram.Options["Token"] = token
-  Telegram.Token = Telegram.Options["Token"] or nil
-  if Telegram.Token~=nil then
+  
+  
+end
+
+function Telegram:UpdateUrls()
+  if Telegram.Options["Token"]~=nil then
     URL_GETUPDATES=Telegram.URL..Telegram.Token.."/getUpdates"
     URL_SENDMESSAGE=Telegram.URL..Telegram.Token.."/sendMessage"
   end
@@ -90,11 +89,15 @@ end
 
 function Telegram:LoadConfig()
   if io.exists(getMudletHomeDir().."/telegram_options.lua") then
+    cecho("&lt;cyan&gt;Loading Telegram config...\n")
     table.load(getMudletHomeDir().."/telegram_options.lua", Telegram.Options) -- using / is OK on Windows too.
   else -- save it if it doesnt exits
-    table.save(getMudletHomeDir().."/telegram_options.lua", Telegram.Options)
+    cecho("&lt;cyan&gt;Creating new Telegram config...\n")
+    Telegram:DeleteConfig()
+    Telegram:SaveConfig()
+    Telegram:Reset()
   end
-  Telegram:SetToken(Telegram.Options["Token"])
+  Telegram:UpdateUrls()
 end
 
 
@@ -107,7 +110,7 @@ function Telegram:HandleUserCommand(cmd,args)
   
   local cmdA = string.split(args," ")
   sub_cmd = string.lower(table.remove(cmdA,1))
-  sub_args = table.concat(cmdA)
+  sub_args = table.concat(cmdA," ")
   
   if (cmd=="help") then         -- Hook to global #HELP
     Telegram:showHelp()
@@ -136,11 +139,35 @@ function Telegram:HandleUserCommand(cmd,args)
       Telegram:showAbout()
     elseif sub_cmd=="status" then
       Telegram:showStatus()
+    elseif sub_cmd=="delete" then
+      Telegram:DeleteConfig()
+      Telegram:SaveConfig()
+      Telegram:Reset()
     elseif sub_cmd=="token" then
       Telegram:SetToken(sub_args)
       Telegram:CheckConfig()
       Telegram:SaveConfig()
-    end
+    elseif sub_cmd=="auth" or sub_cmd=="authorize" then
+      Telegram:Authorize(sub_args)
+    elseif sub_cmd=="unauth" then
+      Telegram:UnAuthorize(sub_args)
+    elseif sub_cmd=="interval" then
+      Telegram:SetInterval(sub_args)
+    elseif sub_cmd=="tell" then
+    
+      local msgA = string.split(sub_args," ")
+      local username = table.remove(msgA,1)
+      local msg = table.concat(msgA," ")
+    
+      Telegram:Tell(username, msg)
+    elseif sub_cmd=="whisper" then
+    
+      local msgA = string.split(sub_args," ")
+      local username = table.remove(msgA,1)
+      local msg = table.concat(msgA," ")
+    
+      Telegram:Tell(username, msg, true)
+    end 
     --local subcmd = 
   end
 end
@@ -152,7 +179,12 @@ function Telegram:showHelp()
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM STATUS"),"Show Telegram Status"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM TOKEN &lt;token&gt;"),"Set Telegram Token"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM UPDATE"),"Upgrade the package"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM INTERVAL &lt;seconds&gt;"),"Set polling interval, default 10s"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM TELL &lt;username&gt; &lt;message&gt;"),"Send a message to a telegram user"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM WHISPER &lt;username&gt; &lt;message&gt;"),"Send a message to a telegram user (no notification)"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM ENABLE/DISABLE"),"Enable or Disable the package"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM AUTH &lt;name&gt;"),"Authorize a Telegram user."))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM UNAUTH &lt;name&gt;"),"UnAuthorize a Telegram user."))
   cecho("&lt;cyan&gt;---------------------------------------------------------------------------------------\n")
   print()
 end
@@ -161,16 +193,85 @@ function Telegram:showAbout()
   print("Show about")
 end
 
+function Telegram:SetInterval(seconds)
+  local s = tonumber(seconds)
+  if s then
+    cecho("&lt;green&gt;Set Telegram polling inverval to "..s.." seconds\n")
+    Telegram.Options.Interval=s
+    Telegram:SaveConfig()
+    if Telegram.getUpdateTimerId~=nil then
+      killTimer(Telegram.getUpdateTimerId)
+    end
+    Telegram.getUpdateTimerId = tempTimer(Telegram.Options.Interval,[[Telegram:getUpdates()]],true)
+  else
+    cecho("&lt;orange&gt;'"..seconds.."' is not a valid interval...\n")
+  end
+end
+
+function Telegram:Authorize(name)
+  --print("authorize")
+  if Telegram.Options.PendingAuthorization[name]~=nil then
+    Telegram.Options.Authorized[name]=Telegram.Options.PendingAuthorization[name]
+    Telegram.Options.PendingAuthorization[name]=nil
+    cecho("&lt;green&gt;Authorized '"..name.."' for Telegram usage. You can now also send messages using\n")
+    cecho("&lt;green&gt;#TELEGRAM TELL "..name.." &lt;message&gt;\n")    
+    Telegram.SaveConfig()
+    
+  else
+    cecho("&lt;orange&gt;'"..name.."' not pending authorization, have him/her send a message to the bot first...\n")
+  end
+end
+
+function Telegram:UnAuthorize(name)
+  --print("authorize")
+  if Telegram.Options.Authorized[name]~=nil then
+    Telegram.Options.Authorized[name]= nil
+    Telegram.Options.PendingAuthorization[name]=nil
+    cecho("&lt;green&gt;UnAuthorized '"..name.."' for Telegram usage. \n")
+    
+    Telegram.SaveConfig()
+    
+  else
+    cecho("&lt;orange&gt;'"..name.."' not authorized, nothing done...\n")
+  end
+end
+
 function Telegram:showStatus()
   cecho("&lt;cyan&gt;---------------------------- TELEGRAM CONNECTOR STATUS --------------------------------\n")
   Telegram:showVersion()
   cecho("&lt;cyan&gt;Token: '"..Telegram.Options["Token"].."'\n")
-  cecho("&lt;cyan&gt;Enabled: '"..tostring(Telegram.Enabled).."'\n")
-  -- enabled
-  -- token
+  cecho("&lt;cyan&gt;Enabled: '"..tostring(Telegram.Options.Enabled).."'\n")
+  cecho("&lt;cyan&gt;Polling Interval: "..Telegram.Options.Interval.." seconds\n")
   -- interval
+  -- last id handled
+  
+  -- authorized
+  cecho("&lt;cyan&gt;Authorized:\n")
+  local countAuthorized =0
+  local countPending =0
+  for _ in pairs(Telegram.Options.Authorized) do countAuthorized = countAuthorized + 1 end
+  for _ in pairs(Telegram.Options.PendingAuthorization) do countPending = countPending + 1 end
+  
+  if countAuthorized&gt;0 then
+    for name,v in pairs(Telegram.Options.Authorized) do
+      cecho("\t&lt;green&gt;"..name.."\n")
+    end
+  else
+    cecho("\t&lt;orange&gt;NONE!\n")
+  end
+  -- pending authorization
+  if countPending&gt;0 then
+    cecho("&lt;cyan&gt;Pending Authorization:\n")
+    for name,v in pairs(Telegram.Options.PendingAuthorization) do
+      cecho("\t&lt;orange&gt;"..name.."\n")
+    end
+  end
+  -- ignored
+  
   cecho("&lt;cyan&gt;---------------------------------------------------------------------------------------\n")
   Telegram:Reset()
+  Telegram:CheckConfig()
+  Telegram:getUpdates()
 end
 
 function Telegram:showVersion()
@@ -180,10 +281,21 @@ function Telegram:showVersion()
 end
 
 
+function Telegram:DeleteConfig()
+  cecho("&lt;cyan&gt;Deleting Telegram config...\n")
+  Telegram.Options = {}
+  Telegram.Options.Authorized={}
+  Telegram.Options.PendingAuthorization = {} -- populate from file
+  Telegram.Options.Enabled = true
+  Telegram.Options.Token=""
+  Telegram.Options.Interval=10
+  Telegram:UpdateUrls()
+end
+
 function Telegram:getUpdates()
   --getHTTP(Telegram.URL..Telegram.Token.."/getUpdates")
   --print("getUpdates")
-  if Telegram.Enabled and Telegram.Token~=nil then
+  if Telegram.Options.Enabled and Telegram.Options.Token~="" then
     --print("enabled, getUpdates")
     getHTTP(URL_GETUPDATES)
   end
@@ -235,6 +347,7 @@ end
 
 function Telegram:Reset()
   Telegram.LastIdHandled=-1
+  Telegram:UpdateUrls()
 end
 
 function Telegram:ParseUpdates(contents)
@@ -242,58 +355,107 @@ function Telegram:ParseUpdates(contents)
   --display(contents)
   if Telegram.LastIdHandled==-1 then
     print("just loaded, update lasthandled to..")
-    Telegram.LastIdHandled = contents[#contents]["message"]["message_id"]
-    print(Telegram.LastIdHandled)
-  end
-  
-  for i,m in pairs(contents) do
-    --display(m["message"])
-    local t = m["message"]["chat"]["type"]  -- private or group
-    
-    local message_id = m["message"]["message_id"]
-    local chat_id = m["message"]["chat"]["id"]
-    local sender_id = m["message"]["from"]["id"]
-    local cmd = m["message"]["text"]
-    local from_username = m["message"]["from"]["username"]
-    
-    --print(t)
-    --print(message_id)
-    --print(channel_id)
-    --print(sender_id)
-    --print(cmd)
-    --print("have i handled this? "..message_id)
-    if message_id&gt;Telegram.LastIdHandled then
-      --print("no")
-      if t=="group" then
-        -- is this message for me?
-        cmdA = cmd:split(" ")
-        local cmdName = string.lower(cmdA[1])
-        if string.find(cmdName,string.lower(Telegram.MyName))~=nil then
-          print("This command is for me, execute it")
-          -- remove first word
-          --display(cmd)
-          --cmdA = string.split(cmd," ")
-          --display(cmdA)
-          table.remove(cmdA,1)
-          --display(cmdA)
-          cmd = table.concat(cmdA," ")
-          --Telegram:HandleCommand(cmd,message_id,chat_id)
-        else
-          --print("This command is for '"..cmdName.."', i am '"..Telegram.MyName.."', Ignore it...")
-          cmd = nil
+    --display(contents[#contents])
+    --Telegram.LastIdHandled = contents[#contents]["message"]["message_id"]
+    for i,m in pairs(contents) do
+      if m["message"]~=nil then
+        if m["message"]["message_id"] then
+          Telegram.LastIdHandled = m["message"]["message_id"]
         end
-        --print("Name")
-        --print(cmdA[1])
-      else
-        -- private message, just execute it
-        --Telegram:HandleCommand(cmd,message_id,chat_id)
-      end
-      if cmd~=nil then
-        Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
       end
     end
     
+    print("Last id handled set to:"..Telegram.LastIdHandled)
+  end
+  
+  for i,m in pairs(contents) do
     
+    if m["message"]==nil then
+      --print("system message, ignore")
+    else
+      
+      local t = m["message"]["chat"]["type"]  -- private or group
+      
+      local message_id = m["message"]["message_id"]
+      local chat_id = m["message"]["chat"]["id"]
+      local from_id = m["message"]["from"]["id"]
+      local sender_id = m["message"]["from"]["id"]
+      local cmd = m["message"]["text"]
+      local from_username = m["message"]["from"]["username"]
+      
+      
+      
+      --print(t)
+      --print(message_id)
+      --print(channel_id)
+      --print(sender_id)
+      --print(cmd)
+      --print("have i handled this? "..message_id)
+      if message_id&gt;Telegram.LastIdHandled then
+        --print("no")
+        --print(message_id.."/"..Telegram.LastIdHandled.." "..cmd)
+        if t=="group" then
+          -- is this message for me?
+          cmdA = cmd:split(" ")
+          local cmdName = string.lower(cmdA[1])
+          if string.find(cmdName,string.lower(Telegram.MyName))~=nil then
+            --print("This command is for me, execute it")
+            -- remove first word
+            --display(cmd)
+            --cmdA = string.split(cmd," ")
+            --display(cmdA)
+            table.remove(cmdA,1)
+            --display(cmdA)
+            cmd = table.concat(cmdA," ")
+            --Telegram:HandleCommand(cmd,message_id,chat_id)
+          else
+            print("This command is for '"..cmdName.."', i am '"..Telegram.MyName.."', Ignore it...")
+            cmd = nil
+          end
+          --print("Name")
+          --print(cmdA[1])
+        else
+          -- private message, just execute it
+          --Telegram:HandleCommand(cmd,message_id,chat_id)
+        end
+        if cmd~=nil then
+          if Telegram.CheckAuthorized(from_username) then
+            Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
+          else
+            --display(m)
+            cecho("&lt;orange&gt;Telegram (".. from_username .." UNAUTHORIZED) has asked me to: '"..cmd.."'\n")
+            cecho("&lt;orange&gt;#TELEGRAM AUTH "..from_username.." to authorize\n")
+            cecho("&lt;orange&gt;#TELEGRAM IGNORE "..from_username.." to ignore future requests\n")
+            -- add to pending approvals
+            Telegram.Options.PendingAuthorization[from_username]=from_id
+        
+          
+            local msg = "&lt;b&gt;"..Telegram:HtmlEncode("Command ignored....\nUser '"..from_username.."' not authorized\n#TELEGRAM AUTH "..from_username.." in Mudlet to Authorize.").."&lt;/b&gt;"
+            
+            local retMsg = {}
+            retMsg["chat_id"]=chat_id
+            retMsg["text"]=msg
+            retMsg["reply_to_message_id"]=message_id
+            retMsg["disable_notification"]=true
+            retMsg["parse_mode"]="HTML"
+            
+            current_message_id = message_id
+            current_chat_id = chat_id
+            
+            --local header = {["Content-Type"] = "application/json"}
+            --postHTTP(yajl.to_string(retMsg),URL_SENDMESSAGE,header)
+            
+            Telegram:SendMessage(retMsg)
+            Telegram.LastIdHandled = message_id
+            
+          end
+        else
+          -- just update the id
+          Telegram.LastIdHandled = message_id
+        end
+      end
+    
+    end
   end
 end
 
@@ -331,22 +493,27 @@ function Telegram:CaptureLine(...)
   end
 end
 
-function Telegram:Tell(username,msg)
-  -- Wont work yet, need to store inbound users/usernames
-  
-  local htmlMsg = Telegram:HtmlEncode(msg) 
-  local retMsg = {}
-  --retMsg["chat_id"]=username
-  retMsg["chat_id"]="@EppaTo"
-  
-  --retMsg["text"]="&lt;pre&gt;"..table.concat(lineBuffer,"\n").."&lt;/pre&gt;"
-  --retMsg["text"]="&lt;pre&gt;"..htmlMsg.."&lt;/pre&gt;"
-  retMsg["text"]=msg
-  --retMsg["reply_to_message_id"]=current_message_id
-  --retMsg["disable_notification"]=true
-  --retMsg["parse_mode"]="HTML"
-  display(retMsg)
-  Telegram:SendMessage(retMsg)
+function Telegram:Tell(username,msg,disable_notification)
+  disable_notification = disable_notification or false
+  --display(username)
+  --display(msg)
+  if Telegram.Options.Authorized[username]~=nil then
+    local htmlMsg = Telegram:HtmlEncode(msg) 
+    local retMsg = {}
+    retMsg["chat_id"]=Telegram.Options.Authorized[username]
+    
+    --retMsg["text"]="&lt;pre&gt;"..table.concat(lineBuffer,"\n").."&lt;/pre&gt;"
+    --retMsg["text"]="&lt;pre&gt;"..htmlMsg.."&lt;/pre&gt;"
+    retMsg["text"]=msg
+    --retMsg["reply_to_message_id"]=current_message_id
+    retMsg["disable_notification"]= disable_notification
+    --retMsg["parse_mode"]="HTML"
+    --display(retMsg)
+    Telegram:SendMessage(retMsg)
+  else
+    cecho("&lt;orange&gt;'"..username.."' is not authorized, use:\n")
+    cecho("&lt;orange&gt;#TELEGRAM AUTH "..username.."\n")
+  end
 end
 
 function Telegram:SendMessage(msgTable)
@@ -355,47 +522,35 @@ function Telegram:SendMessage(msgTable)
 end
 
 function Telegram:CheckConfig()
-  if Telegram.Options["Token"]==nil then
+  if Telegram.Options["Token"]=="" then
     cecho("&lt;orange&gt;Token has not been set.\n")
     cecho("&lt;orange&gt;#TELEGRAM TOKEN &lt;token&gt; to set..\n")
   end
+  local countAuthorized = 0
+  for _ in pairs(Telegram.Options.Authorized) do countAuthorized = countAuthorized + 1 end
+    
+  if countAuthorized==0 then
+    cecho("&lt;orange&gt;No one has been authorized. Send a message to the bot from Telegram, then!\n")
+    cecho("&lt;orange&gt;#TELEGRAM AUTH &lt;charname&gt;\n")
+  end
+  
 end
 
+
+function Telegram:CheckAuthorized(from_username)
+  if Telegram.Options.Authorized[from_username]==nil then
+    return false
+  else
+    return true
+  end
+end
 
 function Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
   -- check if Authorized
   --print("check if "..from_username.." is authorized...")
   --display(Telegram.Authorized)
   --display(Telegram.Authorized[from_username])
-  if Telegram.Authorized[from_username]==nil then
-  
-    cecho("&lt;orange&gt;Telegram (".. from_username .." UNAUTHORIZED) has asked me to: '"..cmd.."'\n")
-    cecho("&lt;orange&gt;#TELEGRAM AUTH "..from_username.." to authorize\n")
-    cecho("&lt;orange&gt;#TELEGRAM IGNORE "..from_username.." to ignore future requests\n")
-    -- add to pending approvals
-    Telegram.PendingAuthorization[from_username]=chat_id
-
-  
-    local msg = "&lt;b&gt;"..Telegram:HtmlEncode("Command ignored....\nUser '"..from_username.."' not authorized\n#TELEGRAM AUTH "..from_username.." in Mudlet to Authorize.").."&lt;/b&gt;"
-    
-    local retMsg = {}
-    retMsg["chat_id"]=chat_id
-    retMsg["text"]=msg
-    retMsg["reply_to_message_id"]=message_id
-    retMsg["disable_notification"]=true
-    retMsg["parse_mode"]="HTML"
-    
-    current_message_id = message_id
-    current_chat_id = chat_id
-    
-    --local header = {["Content-Type"] = "application/json"}
-    --postHTTP(yajl.to_string(retMsg),URL_SENDMESSAGE,header)
-    
-    Telegram:SendMessage(retMsg)
-    Telegram.LastIdHandled = message_id
-  
-    return false
-  end
+ 
   -- notify "On It"
   
   cecho("&lt;cyan&gt;Telegram (".. from_username ..") has asked me to: '"..cmd.."'\n")
@@ -481,10 +636,10 @@ if Telegram.getUpdateTimerId~=nil then
   killTimer(Telegram.getUpdateTimerId)
 end
 Telegram.getReturnHandler = registerAnonymousEventHandler("sysGetHttpDone", [[Telegram:onHttpGetDone]])
-Telegram.getUpdateTimerId = tempTimer(Telegram.UpdateInterval,[[Telegram:getUpdates()]],true)
-
 Telegram:LoadConfig()
+Telegram.getUpdateTimerId = tempTimer(Telegram.Options.Interval,[[Telegram:getUpdates()]],true)
 Telegram:CheckConfig()
+--display(Telegram.Options)
 Telegram:getUpdates()</script>
 				<eventHandlerList />
 			</Script>
