@@ -31,8 +31,13 @@
 
 Telegram = Telegram or {}
 Telegram.Version = "0.0.0"
+
+local url_versionDownload = "https://github.com/takilara/MudletTelegramConnector/releases/latest/download/version.lua"
+local url_latestVersion = "https://github.com/takilara/MudletTelegramConnector/releases/latest/download/"
+
+
 Telegram.PackageName = "Telegram Connector"
--- should be gotten from separate config lua, if not exists, then request it
+Telegram.downloadPath = getMudletHomeDir().."/telegram downloads/"
 
 Telegram.Options = {}
 
@@ -72,9 +77,55 @@ end
 function Telegram:SetToken(token)
   Telegram.Options["Token"] = token
   Telegram:UpdateUrls()
-  
-  
 end
+
+function Telegram:checkVersion()
+  local path = Telegram.downloadPath .. "versions.lua"
+  local versions = {}
+  
+  table.load(path, versions)
+  --display(versions)
+  local pos = table.index_of(versions, Telegram.Version) or 0
+  local line = ""
+  if pos ~= 1 then
+    line = "&lt;orange&gt;(online - ".. versions[1] ..")\n \t #TELEGRAM UPGRADE to upgrade"
+  else
+    line =""
+  end
+  return line
+end
+
+function Telegram:downloadVersionFile()
+  --print("Download the versions file")
+  if not io.exists(Telegram.downloadPath) then lfs.mkdir(Telegram.downloadPath) end
+  local filename = "versions.lua"
+  Telegram.downloading=true
+  --print("download "..url_versionDownload)
+  downloadFile(Telegram.downloadPath .. filename, url_versionDownload)
+end
+
+function Telegram:downloadLatestVersion()
+  cecho("&lt;cyan&gt;Downloading the latest version of "..Telegram.PackageName)
+  print()
+  if not io.exists(Telegram.downloadPath) then lfs.mkdir(Telegram.downloadPath) end
+  local filename = "TelegramConnector.mpackage"
+  Telegram.downloading=true
+  downloadFile(Telegram.downloadPath .. filename, url_latestVersion .. filename)
+end
+
+function Telegram:update_version()
+  print("Update the version")
+  --local path = profilePath .. "/map downloads/generic_mapper.xml"
+  --uninstallPackage("cpc")   -- remove local instance (module)
+  --uninstallModule("cpc") -- remove local instance (module)
+  Telegram:killAllExistingEventHandlers()
+  
+  uninstallPackage("Telegram Connector")
+  
+  installPackage(Telegram.downloadPath .. "TelegramConnector.mpackage")
+  --installModule
+end
+
 
 function Telegram:UpdateUrls()
   if Telegram.Options["Token"]~=nil then
@@ -163,6 +214,8 @@ function Telegram:HandleUserCommand(cmd,args)
       local msg = table.concat(msgA," ")
     
       Telegram:Tell(username, msg, true)
+    elseif sub_cmd=="upgrade" then
+      Telegram:downloadLatestVersion()
     end 
     --local subcmd = 
   end
@@ -174,7 +227,7 @@ function Telegram:showHelp()
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#VERSION"),"Show version(s)"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM STATUS"),"Show Telegram Status"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM TOKEN &lt;token&gt;"),"Set Telegram Token"))
-  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM UPDATE"),"Upgrade the package"))
+  cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM UPGRADE"),"Upgrade the package"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM INTERVAL &lt;seconds&gt;"),"Set polling interval, default 10s"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM TELL &lt;username&gt; &lt;message&gt;"),"Send a message to a telegram user"))
   cecho(string.format("&lt;cyan&gt;%-30s- %s\n",string.format(" %s","#TELEGRAM WHISPER &lt;username&gt; &lt;message&gt;"),"Send a message to a telegram user (no notification)"))
@@ -273,7 +326,10 @@ end
 function Telegram:showVersion()
   --local vline = Telegram:checkVersion()
   --cecho(string.format("&lt;cyan&gt;%-50s: %s %s\n","Cross Profile Communication",cpc.version,vline))
-  cecho(string.format("&lt;cyan&gt;%-50s: %s\n","Telegram Connector",Telegram.Version))
+  --cecho(string.format("&lt;cyan&gt;%-50s: %s\n","Telegram Connector",Telegram.Version))
+  
+  local vline = Telegram:checkVersion()
+  cecho(string.format("&lt;cyan&gt;%-50s: %s %s\n",Telegram.PackageName,Telegram.Version,vline))
 end
 
 
@@ -397,6 +453,26 @@ end
 function Telegram:Reset()
   Telegram.LastIdHandled=-1
   Telegram:UpdateUrls()
+end
+
+function Telegram:onFileDownloaded(event, ...)
+  --print("onFileDownloaded")
+  if event == "sysDownloadDone" and Telegram.downloading then
+    --print("check what type of file")
+    local file = arg[1]
+    --display(file)
+    --display(arg)
+    if string.ends(file,"/versions.lua") then
+      --print("Versions file downloaded from github")
+      Telegram.downloading=false
+      Telegram:checkVersion()
+    elseif string.ends(file,"/TelegramConnector.mpackage") then
+      --print("New version of Telegram downloaded...")
+      Telegram.downloading=false
+      Telegram:update_version()
+    end
+    
+  end
 end
 
 function Telegram:ParseUpdates(contents)
@@ -644,34 +720,48 @@ function Telegram:HandleCommand(cmd,message_id,chat_id,from_username)
   return true
 end
 
+function Telegram:killAllExistingEventHandlers()
+  -- kill all dynamic handlers
+  -- ... events
+  for i,handlerId in pairs(Telegram.EventHandlerIds) do
+    if tonumber(handlerId) then
+      killAnonymousEventHandler(handlerId)
+      Telegram.EventHandlerIds[i]= nil
+    end
+  end
+  
+  -- ... Aliases
+  for i,handlerId in pairs(Telegram.AliasHandlerIds) do
+    --print("Should remove alias "..handlerId)
+    if tonumber(handlerId) then
+      killAlias(handlerId)
+      Telegram.AliasHandlerIds[i]= nil
+    end
+  end
+  
+  if Telegram.getReturnHandler~=nil then
+    killAnonymousEventHandler(Telegram.getReturnHandler)
+  end
+  
+  if Telegram.getUpdateTimerId~=nil then
+    killTimer(Telegram.getUpdateTimerId)
+  end
+end
+
+
 -- =========================================
 --                   INIT
 -- =========================================
 
+Telegram:killAllExistingEventHandlers()
 
 
--- kill all dynamic handlers
--- ... events
-for i,handlerId in pairs(Telegram.EventHandlerIds) do
-  if tonumber(handlerId) then
-    killAnonymousEventHandler(handlerId)
-    Telegram.EventHandlerIds[i]= nil
-  end
-end
-
--- ... Aliases
-for i,handlerId in pairs(Telegram.AliasHandlerIds) do
-  --print("Should remove alias "..handlerId)
-  if tonumber(handlerId) then
-    killAlias(handlerId)
-    Telegram.AliasHandlerIds[i]= nil
-  end
-end
 
 
 -- setup dynamic eventHandlers
 table.insert(Telegram.EventHandlerIds,registerAnonymousEventHandler("sysPostHttpDone", [[Telegram:onHttpPost]]))
 table.insert(Telegram.EventHandlerIds,registerAnonymousEventHandler("sysPostHttpError", [[Telegram:onHttpPost]]))
+table.insert(Telegram.EventHandlerIds,registerAnonymousEventHandler("sysDownloadDone", [[Telegram:onFileDownloaded]]))
 
 table.insert(Telegram.AliasHandlerIds,tempAlias([[^#(?i)(\btelegram\b|\bhelp\b|\bversion\b|\babout\b)(?-i)\s*(.*)$]],[[Telegram:HandleUserCommand(matches[2],matches[3])]]))
 
@@ -686,17 +776,13 @@ end
 
 
 -- manual handlers
-if Telegram.getReturnHandler~=nil then
-  killAnonymousEventHandler(Telegram.getReturnHandler)
-end
 
-if Telegram.getUpdateTimerId~=nil then
-  killTimer(Telegram.getUpdateTimerId)
-end
 Telegram.getReturnHandler = registerAnonymousEventHandler("sysGetHttpDone", [[Telegram:onHttpGetDone]])
+Telegram:downloadVersionFile()
 Telegram:LoadConfig()
 Telegram.getUpdateTimerId = tempTimer(Telegram.Options.Interval,[[Telegram:getUpdates()]],true)
 Telegram:CheckConfig()
+--Telegram:CheckVersion()
 --display(Telegram.Options)
 Telegram:getInitialUpdates()</script>
 			<eventHandlerList />
