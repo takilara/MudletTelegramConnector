@@ -66,8 +66,8 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
-          draft: true
-          prerelease: true
+          draft: false
+          prerelease: false
 
       # modify to also upload version.lua
       - name: Upload Release Asset
