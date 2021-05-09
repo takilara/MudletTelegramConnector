@@ -11,7 +11,7 @@ Mudlet Package that integrates with Telegram
 | \#TELEGRAM STATUS                          | Package Status |
 | \#TELEGRAM VERSION                         | Version info |
 | \#TELEGRAM HELP                            | Helpfile     |
-| \#TELEGRAM UPDATE                          |              |
+| \#TELEGRAM UPGRADE                         | Upgrade the package        |
 | \#TELEGRAM TOKEN <token>                   |              |
 | \#TELEGRAM INTERVAL <seconds>              |              |
 | \#TELEGRAM ENABLE                          |     |
