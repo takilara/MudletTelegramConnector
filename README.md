@@ -3,19 +3,19 @@ Mudlet Package that integrates with Telegram
 
 ## Commands
 
-| Command            | Comment      |
-| -------            | --------     |
-| \#HELP             | Helpfile     |
-| \#VERSION          | Version info |
-| \#TELEGRAM         | Package Status |
-| \#TELEGRAM STATUS  | Package Status |
-| \#TELEGRAM VERSION | Version info |
-| \#TELEGRAM HELP    | Helpfile     |
-| \#TELEGRAM UPDATE             |              |
-| \#TELEGRAM TOKEN <token> |              |
-| \#TELEGRAM INTERVAL <seconds> |              |
-| \#TELEGRAM ENABLE |     |
-| \#TELEGRAM DISABLE |     |
+| Command                                    | Comment      |
+| -------                                    | --------     |
+| \#HELP                                     | Helpfile     |
+| \#VERSION                                  | Version info |
+| \#TELEGRAM                                 | Package Status |
+| \#TELEGRAM STATUS                          | Package Status |
+| \#TELEGRAM VERSION                         | Version info |
+| \#TELEGRAM HELP                            | Helpfile     |
+| \#TELEGRAM UPDATE                          |              |
+| \#TELEGRAM TOKEN <token>                   |              |
+| \#TELEGRAM INTERVAL <seconds>              |              |
+| \#TELEGRAM ENABLE                          |     |
+| \#TELEGRAM DISABLE                         |     |
 | \#TELEGRAM TELL <username> <message> |     |
 | \#TELEGRAM WHISPER <username> <message> |     |
 | \#TELEGRAM AUTH <username> |     |
