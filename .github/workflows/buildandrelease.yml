@@ -29,9 +29,10 @@ jobs:
         id: build_zip1
         run: |
           mkdir build -p
-          sed -i 's/"0.0.0"/"${{ steps.get_version1.outputs.version }}"/g' version.lua
+          sed -i 's/"0.0.0"/"${{ steps.get_version1.outputs.version }}"/g' "Telegram Connector.xml"
+          echo return {{[1] = [[${{ steps.get_version2.outputs.version }}]],},} > "version.lua"
           cp version.lua build/version.lua
-          zip --junk-paths build/TelegramConnector.mpackage README.md "Telegram Connector.xml" LICENSE config.lua version.lua
+          zip --junk-paths build/TelegramConnector.mpackage README.md "Telegram Connector.xml" LICENSE config.lua
       
 
       # if workflow was triggered due to a push, then that means we also got a v tag, and can create a release
@@ -52,7 +53,8 @@ jobs:
         id: build_zip2
         run: |
           mkdir build -p
-          sed -i 's/"0.0.0"/"${{ steps.get_version1.outputs.version }}"/g' version.lua
+          sed -i 's/"0.0.0"/"${{ steps.get_version1.outputs.version }}"/g' "Telegram Connector.xml"
+          echo return {{[1] = [[${{ steps.get_version2.outputs.version }}]],},} > "version.lua"
           cp version.lua build/version.lua
           zip --junk-paths build/TelegramConnector.mpackage README.md "Telegram Connector.xml" LICENSE config.lua version.lua
       

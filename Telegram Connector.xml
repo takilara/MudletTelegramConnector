@@ -6,12 +6,6 @@
 	<AliasPackage />
 	<ActionPackage />
 	<ScriptPackage>
-		<ScriptGroup isActive="yes" isFolder="yes">
-			<name>Telegram Connector</name>
-			<packageName></packageName>
-			<script></script>
-			<eventHandlerList />
-		</ScriptGroup>
 		<Script isActive="yes" isFolder="no">
 			<name>TelegramMainScript</name>
 			<packageName></packageName>
