@@ -30,9 +30,7 @@ jobs:
         run: |
           mkdir build -p
           sed -i 's/Telegram.Version = "0.0.0"/Telegram.Version = "${{ steps.get_version1.outputs.version }}"/g' "Telegram Connector.xml"
-          
-          
-          echo return {{[1] = [[${{ steps.get_version2.outputs.version }}]],},} > "version.lua"
+          echo return {{[1] = [[${{ steps.get_version1.outputs.version }}]],},} > "version.lua"
           cp version.lua build/version.lua
           zip --junk-paths build/TelegramConnector.mpackage README.md "Telegram Connector.xml" LICENSE config.lua
       
@@ -55,7 +53,7 @@ jobs:
         id: build_zip2
         run: |
           mkdir build -p
-          sed -i 's/Telegram.Version = "0.0.0"/Telegram.Version = "${{ steps.get_version1.outputs.version }}"/g' "Telegram Connector.xml"
+          sed -i 's/Telegram.Version = "0.0.0"/Telegram.Version = "${{ steps.get_version2.outputs.version }}"/g' "Telegram Connector.xml"
           echo return {{[1] = [[${{ steps.get_version2.outputs.version }}]],},} > "version.lua"
           cp version.lua build/version.lua
           zip --junk-paths build/TelegramConnector.mpackage README.md "Telegram Connector.xml" LICENSE config.lua
