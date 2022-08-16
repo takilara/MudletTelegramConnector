@@ -3,23 +3,25 @@ Mudlet Package that integrates with Telegram
 
 ## Commands
 
-| Command                                    | Comment      |
-| -------                                    | --------     |
-| \#HELP                                     | Helpfile     |
-| \#VERSION                                  | Version info |
-| \#TELEGRAM                                 | Package Status |
-| \#TELEGRAM STATUS                          | Package Status |
-| \#TELEGRAM VERSION                         | Version info |
-| \#TELEGRAM HELP                            | Helpfile     |
-| \#TELEGRAM UPGRADE                         | Upgrade the package        |
-| \#TELEGRAM TOKEN <token>                   |              |
-| \#TELEGRAM INTERVAL <seconds>              |              |
-| \#TELEGRAM ENABLE                          |     |
-| \#TELEGRAM DISABLE                         |     |
-| \#TELEGRAM TELL <username> <message> |     |
-| \#TELEGRAM WHISPER <username> <message> |     |
-| \#TELEGRAM AUTH <username> |     |
-| \#TELEGRAM UNAUTH <username> |     |
+| Command                                    | API | Comment      |
+| -------                                    | --- | --------     |
+| \#HELP                                     |     | Helpfile     |
+| \#VERSION                                  |     | Version info |
+| \#TELEGRAM                                 |     | Package Status |
+| \#TELEGRAM STATUS                          | Telegram:showStatus()  | Package Status |
+| \#TELEGRAM VERSION                         | Telegram:showVersion() | Version info |
+| \#TELEGRAM HELP                            | Telegram:showHelp() | Helpfile     |
+| \#TELEGRAM UPGRADE                         | Telegram:downloadLatestVersion() | Upgrade the package        |
+| \#TELEGRAM TOKEN &lt;token&gt;                   | Telegram:SetToken(token)  | Set Telegram Token"             |
+| \#TELEGRAM INTERVAL &lt;seconds&gt;              | Telegram:SetInterval(5)   | Set polling interval, default 10s             |
+| \#TELEGRAM ENABLE                          |  | Enable the package   |
+| \#TELEGRAM DISABLE                         |  | Disable the package    |
+| \#TELEGRAM TELL &lt;username&gt; &lt;message&gt;       | Telegram:Tell("takilara","Someone is attacking me!!!") | Send a message to a telegram user    |
+| \#TELEGRAM WHISPER &lt;username&gt; &lt;message&gt;    | Telegram:Tell("takilara","This message will get delivered without notification",true) | Send a message to a telegram user (no notification)    |
+| \#TELEGRAM AUTH &lt;username&gt;                 |  | Authorize a Telegram user    |
+| \#TELEGRAM UNAUTH &lt;username&gt;               |  | UnAuthorize a Telegram user    |
+
+The #&lt;COMMAND&gt; commands are meant to be used from within the game. To use these mechanics in scripts or aliases, use the API commands
 
 ## Setup
 
